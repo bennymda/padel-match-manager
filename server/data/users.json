@@ -1,0 +1,29 @@
+[
+  {
+    "id": "usr_1790463862224_00de41eb",
+    "name": "Budi Padel",
+    "email": "budi@padel.com",
+    "salt": "678f40e75aa6b0355c901b857a8a3959",
+    "hash": "15aec1454e123c5da03ff65bfc8931f583a6bd1eb4a8a88a8ffbc17efd42c32ab1b46a97861ec43f9d62f8bd4c06848ac5d21c0e7f84cd18caba0996d63328d3",
+    "role": "host",
+    "skillLevel": "advanced",
+    "mmr": 1450,
+    "avatar": "https://api.dicebear.com/7.x/bottts/svg?seed=Budi%20Padel",
+    "createdAt": "2026-09-26T23:04:22.224Z",
+    "stats": {
+      "tournamentsPlayed": 0,
+      "matchesPlayed": 0,
+      "matchesWon": 0,
+      "matchesLost": 0,
+      "matchesDrawn": 0,
+      "totalPointsWon": 0,
+      "mmrHistory": [
+        {
+          "date": "2026-09-26T23:04:22.224Z",
+          "mmr": 1450,
+          "note": "Initial Rating"
+        }
+      ]
+    }
+  }
+]

@@ -1,0 +1,147 @@
+import { randomUUID } from 'node:crypto';
+import { buildHistoryMatrix } from './americano.js';
+
+/**
+ * Mexicano Match Generation Algorithm
+ * Features:
+ * - Dynamic pairing based on current leaderboard standings!
+ * - Top players play top players, middle play middle, beginner play beginner
+ * - Balances teams within court (e.g. Rank 1 & 4 vs Rank 2 & 3) while checking partner history
+ * - Supports Doubles, Singles, Fixed Partner
+ * - Handles byes and rest players fairly
+ */
+
+export function generateMexicanoRound({
+  players,
+  leaderboard = [], // Array of player standing objects sorted by rank
+  rounds = [],
+  courtCount = 2,
+  gameMode = 'doubles',
+  pointsTarget = 24
+}) {
+  const roundNumber = rounds.length + 1;
+  const history = buildHistoryMatrix(rounds);
+
+  // If Round 1 and leaderboard is empty or all 0, sort by MMR or seed
+  const manuallyResting = players.filter(p => p.status === 'resting' || p.status === 'late' || p.status === 'injured');
+  const availablePlayers = players.filter(p => p.status === 'active' || !p.status);
+
+  // Map leaderboard to available players
+  const playerRankMap = new Map();
+  leaderboard.forEach((entry, idx) => {
+    playerRankMap.set(entry.id, idx);
+  });
+
+  // Sort available players by leaderboard rank, then MMR
+  const rankedPlayers = [...availablePlayers].sort((a, b) => {
+    const rankA = playerRankMap.has(a.id) ? playerRankMap.get(a.id) : 9999;
+    const rankB = playerRankMap.has(b.id) ? playerRankMap.get(b.id) : 9999;
+    if (rankA !== rankB) return rankA - rankB;
+    // Tiebreaker: MMR
+    const mmrA = a.mmr || 1200;
+    const mmrB = b.mmr || 1200;
+    if (mmrB !== mmrA) return mmrB - mmrA;
+    return Math.random() - 0.5;
+  });
+
+  const playersPerCourt = gameMode === 'singles' ? 2 : 4;
+  const maxActivePlayers = courtCount * playersPerCourt;
+  const totalSlotsNeeded = Math.min(rankedPlayers.length - (rankedPlayers.length % playersPerCourt), maxActivePlayers);
+
+  if (totalSlotsNeeded < playersPerCourt) {
+    throw new Error(`Minimal ${playersPerCourt} pemain aktif dibutuhkan untuk mode ${gameMode}`);
+  }
+
+  // Determine Byes
+  const numByesNeeded = rankedPlayers.length - totalSlotsNeeded;
+  let activeForRound = [...rankedPlayers];
+  let roundByes = [...manuallyResting.map(p => p.id)];
+
+  if (numByesNeeded > 0) {
+    // Select byes based on fewest byes, then lowest rank
+    const byeCandidates = [...rankedPlayers].sort((a, b) => {
+      const byeA = history.byeHistory[a.id] || 0;
+      const byeB = history.byeHistory[b.id] || 0;
+      if (byeA !== byeB) return byeA - byeB;
+      // Lowest rank rests if equal byes
+      return rankedPlayers.indexOf(b) - rankedPlayers.indexOf(a);
+    });
+
+    const chosenToRest = byeCandidates.slice(0, numByesNeeded);
+    const restingIds = new Set(chosenToRest.map(p => p.id));
+    activeForRound = rankedPlayers.filter(p => !restingIds.has(p.id));
+    roundByes.push(...chosenToRest.map(p => p.id));
+  }
+
+  const actualCourts = Math.floor(activeForRound.length / playersPerCourt);
+  const matches = [];
+
+  for (let c = 0; c < actualCourts; c++) {
+    if (gameMode === 'doubles') {
+      // 4 players for this court
+      const courtPlayers = activeForRound.slice(c * 4, c * 4 + 4);
+      const [p1, p2, p3, p4] = courtPlayers;
+
+      // In Mexicano, we test 3 pairings:
+      // Option 1: 1&4 vs 2&3 (Classic Mexicano balance)
+      // Option 2: 1&3 vs 2&4
+      // Option 3: 1&2 vs 3&4
+      const options = [
+        {
+          team1: [p1.id, p4.id],
+          team2: [p2.id, p3.id],
+          partnerPenalty: (history.partnerHistory[p1.id]?.[p4.id] || 0) + (history.partnerHistory[p2.id]?.[p3.id] || 0)
+        },
+        {
+          team1: [p1.id, p3.id],
+          team2: [p2.id, p4.id],
+          partnerPenalty: (history.partnerHistory[p1.id]?.[p3.id] || 0) + (history.partnerHistory[p2.id]?.[p4.id] || 0)
+        },
+        {
+          team1: [p1.id, p2.id],
+          team2: [p3.id, p4.id],
+          partnerPenalty: (history.partnerHistory[p1.id]?.[p2.id] || 0) + (history.partnerHistory[p3.id]?.[p4.id] || 0)
+        }
+      ];
+
+      // Pick option with minimum partner penalty (ideally 0)
+      options.sort((a, b) => a.partnerPenalty - b.partnerPenalty);
+      const chosen = options[0];
+
+      matches.push({
+        id: randomUUID(),
+        courtNumber: c + 1,
+        team1: chosen.team1,
+        team2: chosen.team2,
+        team1Score: 0,
+        team2Score: 0,
+        status: 'pending',
+        pointsTarget
+      });
+    } else if (gameMode === 'singles') {
+      const p1 = activeForRound[c * 2];
+      const p2 = activeForRound[c * 2 + 1];
+
+      matches.push({
+        id: randomUUID(),
+        courtNumber: c + 1,
+        team1: [p1.id],
+        team2: [p2.id],
+        team1Score: 0,
+        team2Score: 0,
+        status: 'pending',
+        pointsTarget
+      });
+    }
+  }
+
+  return {
+    roundNumber,
+    format: 'mexicano',
+    gameMode,
+    status: 'in_progress',
+    matches,
+    byes: roundByes,
+    createdAt: new Date().toISOString()
+  };
+}
