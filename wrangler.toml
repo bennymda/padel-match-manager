@@ -1,0 +1,10 @@
+# Cloudflare Pages & D1 Configuration for PadelPro Match Manager
+name = "padel-match-manager"
+compatibility_date = "2024-09-23"
+pages_build_output_dir = "dist"
+
+# Cloudflare D1 Serverless SQLite Database Binding
+[[d1_databases]]
+binding = "DB"
+database_name = "padel_db"
+database_id = "padel_db_id" # Diisi dengan database_id saat setup di Cloudflare Dashboard / Wrangler

@@ -174,6 +174,37 @@ export default function App() {
     };
   }, [tournament?.code, role, activePlayer?.id]);
 
+  // Live polling fallback for Cloudflare Pages / Serverless (when socket is disconnected)
+  useEffect(() => {
+    if (!tournament?.code || isConnected) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/tournaments/${tournament.code}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.success && data.tournament) {
+          setTournament(prev => {
+            if (!prev) return data.tournament;
+            // Only update state if updatedAt changed or match count/scores changed
+            if (prev.updatedAt !== data.tournament.updatedAt) {
+              return data.tournament;
+            }
+            return prev;
+          });
+          if (activePlayer) {
+            const found = data.tournament.players.find(p => p.id === activePlayer.id);
+            if (found) setActivePlayer(found);
+          }
+        }
+      } catch (err) {
+        // Silently ignore transient network drops
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [tournament?.code, isConnected, activePlayer?.id]);
+
   const loadTournament = async (code) => {
     try {
       const res = await fetch(`/api/tournaments/${code}`);
